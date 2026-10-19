@@ -1,0 +1,8 @@
+{
+  "extends": "@novastore/config/tsconfig/nestjs.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["src", "test"]
+}

@@ -1,0 +1,90 @@
+/*
+ * NovaStore design tokens — docs/UI_DESIGN_SYSTEM.md §2.
+ * Mỗi app import file này sau `@import "tailwindcss";`.
+ */
+
+:root {
+  --ns-primary: #059669;
+  --ns-primary-fg: #ffffff;
+  --ns-primary-soft: #ecfdf5;
+  --ns-bg: #fafaf7;
+  --ns-surface: #ffffff;
+  --ns-surface-muted: #f1f2ee;
+  --ns-fg: #0f172a;
+  --ns-fg-muted: #64748b;
+  --ns-border: #e5e7e1;
+  --ns-warning: #d97706;
+  --ns-danger: #e11d48;
+  --ns-info: #0284c7;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ns-primary: #34d399;
+    --ns-primary-fg: #022c22;
+    --ns-primary-soft: #064e3b;
+    --ns-bg: #0b0f0e;
+    --ns-surface: #141a18;
+    --ns-surface-muted: #1c2421;
+    --ns-fg: #f1f5f9;
+    --ns-fg-muted: #94a3b8;
+    --ns-border: #26302c;
+    --ns-warning: #fbbf24;
+    --ns-danger: #fb7185;
+    --ns-info: #38bdf8;
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-primary: var(--ns-primary);
+  --color-primary-fg: var(--ns-primary-fg);
+  --color-primary-soft: var(--ns-primary-soft);
+  --color-bg: var(--ns-bg);
+  --color-surface: var(--ns-surface);
+  --color-surface-muted: var(--ns-surface-muted);
+  --color-fg: var(--ns-fg);
+  --color-fg-muted: var(--ns-fg-muted);
+  --color-border: var(--ns-border);
+  --color-warning: var(--ns-warning);
+  --color-danger: var(--ns-danger);
+  --color-info: var(--ns-info);
+
+  --font-sans: var(--font-be-vietnam), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, 'JetBrains Mono', SFMono-Regular, Menlo, monospace;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.05);
+}
+
+@layer base {
+  html {
+    background-color: var(--ns-bg);
+    color: var(--ns-fg);
+  }
+
+  body {
+    min-height: 100dvh;
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ns-primary);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}

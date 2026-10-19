@@ -1,0 +1,36 @@
+{
+  "name": "@novastore/web-auth",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    "./config": "./src/config.ts",
+    "./server": "./src/server.ts",
+    "./middleware": "./src/middleware.ts",
+    "./client": "./src/client.tsx",
+    "./notice": "./src/notice.tsx"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@novastore/types": "workspace:*",
+    "@novastore/ui": "workspace:*",
+    "@supabase/ssr": "^0.7.0",
+    "@supabase/supabase-js": "^2.75.0",
+    "server-only": "^0.0.1"
+  },
+  "peerDependencies": {
+    "next": "^15.5.0",
+    "react": "^19.0.0"
+  },
+  "devDependencies": {
+    "@novastore/config": "workspace:*",
+    "@types/node": "^22.18.10",
+    "@types/react": "^19.1.13",
+    "next": "^15.5.4",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "typescript": "^5.9.3"
+  }
+}

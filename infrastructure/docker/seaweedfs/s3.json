@@ -1,0 +1,9 @@
+{
+  "identities": [
+    {
+      "name": "novastore-dev",
+      "credentials": [{ "accessKey": "novastore", "secretKey": "novastore-dev-secret" }],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}

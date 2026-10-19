@@ -65,6 +65,9 @@ jobs:
         run: pnpm --filter @novastore/database validate
       - name: Apply migrations to a fresh database
         run: pnpm db:migrate
+      # Thất bại nếu `prisma migrate dev` sẽ sinh thay đổi (vd. DROP index viết tay).
+      - name: Schema matches migrations (no drift)
+        run: pnpm --filter @novastore/database drift-check
       - name: Seed
         run: pnpm db:seed
       - name: Append-only audit log is enforced

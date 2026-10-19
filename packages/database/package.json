@@ -22,6 +22,7 @@
     "validate": "prisma validate",
     "migrate:dev": "prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
+    "drift-check": "prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel prisma/schema.prisma --exit-code",
     "seed": "tsx prisma/seed.ts",
     "grant-role": "tsx scripts/grant-role.ts",
     "studio": "prisma studio"

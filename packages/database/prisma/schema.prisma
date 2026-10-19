@@ -202,8 +202,9 @@ model App {
   ratingAvg           Decimal       @default(0) @map("rating_avg") @db.Decimal(2, 1)
   ratingCount         Int           @default(0) @map("rating_count")
   downloadCount       BigInt        @default(0) @map("download_count")
-  /// Cột generated (xem migration); không ghi từ ứng dụng.
-  searchVector        Unsupported("tsvector")? @map("search_vector")
+  /// Cột GENERATED ALWAYS (biểu thức trong migration init); không ghi từ ứng dụng.
+  /// `dbgenerated()` rỗng để Prisma không sinh `DROP DEFAULT` cho biểu thức generated.
+  searchVector        Unsupported("tsvector")? @default(dbgenerated()) @map("search_vector")
   createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -219,6 +220,9 @@ model App {
 
   @@index([developerAccountId])
   @@index([status, categoryId, downloadCount(sort: Desc)])
+  // Khai báo để `prisma migrate dev` không DROP index full-text. Index trigram
+  // trên biểu thức immutable_unaccent(lower(title)) nằm ở migration và Prisma bỏ qua.
+  @@index([searchVector], map: "apps_search_vector_idx", type: Gin)
   @@map("apps")
 }
 

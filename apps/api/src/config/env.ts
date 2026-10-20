@@ -31,6 +31,8 @@ export const envSchema = z
     IP_HASH_SECRET: z.string().min(32).default(DEV_IP_HASH_SECRET),
     TRUST_PROXY: booleanString.default(false),
     SENTRY_DSN: z.url().optional(),
+    /** Swagger UI + /api/openapi.json. Mặc định: bật ngoài production. */
+    OPENAPI_ENABLED: booleanString.optional(),
   })
   .refine((env) => env.SUPABASE_URL || env.SUPABASE_JWT_SECRET, {
     message: 'Cần SUPABASE_URL (xác minh JWKS) hoặc SUPABASE_JWT_SECRET (HS256)',
@@ -43,6 +45,7 @@ export const envSchema = z
   .transform((env) => ({
     ...env,
     REQUIRE_STAFF_MFA: env.REQUIRE_STAFF_MFA ?? env.NODE_ENV === 'production',
+    OPENAPI_ENABLED: env.OPENAPI_ENABLED ?? env.NODE_ENV !== 'production',
   }));
 
 export type Env = z.output<typeof envSchema>;

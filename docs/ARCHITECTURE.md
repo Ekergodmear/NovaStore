@@ -88,7 +88,7 @@ sequenceDiagram
   S-->>C: access_token (JWT, ~1h) + refresh_token
   C->>A: Request + Bearer JWT
   A->>A: Verify chữ ký qua JWKS cache, kiểm exp/aud/iss
-  A->>DB: Tải user + roles (cache Redis 60s)
+  A->>DB: Tải user + roles (mỗi request; cache Redis chưa làm)
   A->>A: RBAC guard + policy (ownership)
   A-->>C: Response
 ```
@@ -97,6 +97,52 @@ sequenceDiagram
 - Policy hai tầng: (1) **Role guard** — endpoint yêu cầu role nào; (2) **Resource policy** — vd. developer chỉ sửa app thuộc developer account mà họ là member.
 - Moderator/Admin console bắt buộc MFA (Supabase TOTP) — kiểm `aal2` trong JWT.
 - Android Store: dùng Supabase PKCE qua Custom Tab; token lưu bằng EncryptedSharedPreferences/DataStore + Keystore.
+
+### 4.1 Vòng đời developer account (Phase 2A — đã triển khai)
+
+```mermaid
+stateDiagram-v2
+  [*] --> pending: POST /developers
+  pending --> active: staff duyệt
+  pending --> rejected: staff từ chối (lý do)
+  active --> suspended: staff tạm khóa (lý do)
+  suspended --> active: staff mở lại
+  active --> banned: Admin cấm (lý do)
+  suspended --> banned: Admin cấm (lý do)
+  rejected --> [*]
+  banned --> [*]
+```
+
+| Trạng thái | Xem hồ sơ & trạng thái | Sửa hồ sơ | Phát hành (Phase 2B+) | Hồ sơ công khai |
+|-----------|:---:|:---:|:---:|:---:|
+| `pending` | ✓ | ✓ | ✗ | ẩn |
+| `active` | ✓ | ✓ | ✓ | hiện |
+| `suspended` | ✓ | ✗ | ✗ | ẩn |
+| `banned` | ✓ | ✗ | ✗ | ẩn |
+| `rejected` | ✓ | ✗ | ✗ | ẩn |
+
+- Developer **không bao giờ** tự đổi trạng thái: không body nào nhận `status`, và route `/admin/developers/*` cần role staff + MFA.
+- Bảng chuyển hợp lệ nằm trong `packages/types` (`DEVELOPER_STATUS_TRANSITIONS`), dùng chung cho API và UI.
+- Sửa hồ sơ chỉ owner/admin của account; `editor` chỉ xem.
+- Mỗi user thuộc tối đa **một** developer account (unique `developer_members.user_id`), nên "developer hiện tại" luôn xác định duy nhất. Team nhiều người trong một account vẫn được; một người thuộc nhiều account là post-MVP.
+
+### 4.2 Phân quyền theo quyền sở hữu (ownership)
+
+Module `apps/api/src/developers`, dùng lại ở Phase 2B–2D:
+
+| Thành phần | Vai trò |
+|-----------|--------|
+| `DeveloperAccessService.resolve(userId)` | Đọc `developer_members` mới nhất từ DB → `DeveloperContext { userId, accountId, memberRole, status }`. Không dùng dữ liệu từ client. |
+| `DeveloperAccessService.require(user, capability)` | `read` / `manage_profile` / `publish`; ném `403` với mã cụ thể. |
+| `@RequireDeveloper(capability)` + `@CurrentDeveloper()` | Guard theo route (chạy sau AuthGuard/RolesGuard toàn cục) và tham số inject context. |
+| `assertOwnsAccount(context, id)` | Tài nguyên khác account → `404` giống hệt không tồn tại. |
+| `ownedWhere(context)` | `{ developerAccountId }` để mọi truy vấn tài nguyên developer (app, release…) bị giới hạn ngay ở câu SQL. |
+
+Nguyên tắc:
+1. **Phân quyền ở tầng service/DB**, không chỉ ở guard: mutation lặp lại điều kiện trạng thái trong `WHERE` (`updateMany … status IN (…)`), nên staff khóa tài khoản giữa chừng cũng không lọt (không TOCTOU).
+2. **Kiểm sở hữu trước capability** trên route theo id: developer bị khóa gọi id của người khác vẫn nhận `404`, không biết được id đó có tồn tại.
+3. **Chống mass assignment** bằng Zod `.strict()` và ánh xạ từng trường được phép sang Prisma `data`.
+4. **Đồng thời**: unique constraint ở DB (`developer_members.user_id`, `developer_accounts.slug`) là chốt cuối; lỗi `P2002` được ánh xạ sang `409` có mã.
 
 ## 5. Luồng dữ liệu chính
 

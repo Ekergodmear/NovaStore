@@ -58,11 +58,19 @@ erDiagram
 | contact_email | citext | |
 | website | text null | |
 | verification_status | enum (`unverified`,`email_verified`,`verified`) | |
-| status | enum (`active`,`suspended`,`banned`) | suspended → mọi app bị ẩn |
+| status | enum `developer_status` (`pending`,`active`,`suspended`,`banned`,`rejected`), default `pending` | Vòng đời: [ARCHITECTURE.md §4.1](ARCHITECTURE.md#41-vòng-đời-developer-account-phase-2a--đã-triển-khai). Chỉ staff đổi được |
+| status_reason | varchar(500) null | Lý do staff ghi khi rejected/suspended/banned; hiển thị cho developer |
+| status_changed_at | timestamptz null | Lần đổi trạng thái gần nhất |
 | agreement_version | text | phiên bản Developer Agreement đã chấp nhận |
 | agreement_accepted_at | timestamptz | |
 
-**`developer_members`** — `(developer_account_id, user_id)` PK, `member_role` enum (`owner`,`admin`,`editor`). MVP: 1 owner/account, cấu trúc sẵn cho team.
+**`developer_members`** — `(developer_account_id, user_id)` PK, `member_role` enum (`owner`,`admin`,`editor`). **Unique `user_id`** (Phase 2A): mỗi user thuộc tối đa một developer account; chặn đăng ký trùng ở tầng DB kể cả khi đồng thời. Một account vẫn có thể có nhiều thành viên.
+
+**Migration Phase 2A** (không đổi dữ liệu hiện có):
+1. `20261020000000_developer_status_values` — chỉ `ALTER TYPE … ADD VALUE` `pending` (trước `active`) và `rejected` (sau `banned`). Tách riêng vì Postgres không cho dùng giá trị enum mới trong cùng transaction.
+2. `20261020000100_developer_lifecycle` — thêm `status_reason`, `status_changed_at` (nullable); đổi DEFAULT sang `pending` (tài khoản cũ giữ trạng thái); thay index `developer_members(user_id)` bằng unique index. Nếu DB đã có user thuộc nhiều account, migration dừng và rollback toàn bộ — không xóa dữ liệu, cần xử lý thủ công.
+
+Đã kiểm chứng trên Postgres (PGlite): nâng cấp DB Phase 1 có dữ liệu giữ nguyên trạng thái cũ; dữ liệu trùng làm migration rollback trọn vẹn; `prisma migrate deploy` + `drift-check` sạch.
 
 ### Catalog
 

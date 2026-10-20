@@ -78,6 +78,43 @@ jobs:
           if psql "$PSQL_URL" -v ON_ERROR_STOP=1 -c "DELETE FROM audit_logs;"; then
             echo "audit_logs DELETE should have failed" && exit 1
           fi
+      - name: Published release artifacts are immutable
+        run: |
+          ARTIFACT=00000000-0000-4000-8000-00000000ca01
+          psql "$PSQL_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          INSERT INTO users (id, email, updated_at)
+            VALUES ('00000000-0000-4000-8000-00000000ca10', 'ci-artifact@novastore.test', now());
+          INSERT INTO developer_accounts (id, slug, display_name, contact_email, agreement_version, agreement_accepted_at, updated_at)
+            VALUES ('00000000-0000-4000-8000-00000000ca20', 'ci-artifact', 'CI', 'ci@novastore.test', '2026-10', now(), now());
+          INSERT INTO apps (id, developer_account_id, slug, title, short_description, full_description, category_id, updated_at)
+            VALUES ('00000000-0000-4000-8000-00000000ca30', '00000000-0000-4000-8000-00000000ca20', 'ci-artifact-app', 'CI App', 'CI', 'CI',
+                    (SELECT id FROM app_categories ORDER BY sort_order LIMIT 1), now());
+          INSERT INTO app_releases (id, app_id, created_by, updated_at)
+            VALUES ('00000000-0000-4000-8000-00000000ca40', '00000000-0000-4000-8000-00000000ca30', '00000000-0000-4000-8000-00000000ca10', now());
+          INSERT INTO release_artifacts (id, release_id, quarantine_key, size_bytes, sha256, package_name, version_code, version_name, min_sdk, target_sdk)
+            VALUES ('00000000-0000-4000-8000-00000000ca01', '00000000-0000-4000-8000-00000000ca40', 'uploads/ci', 1024,
+                    repeat('a', 64), 'vn.novastore.ci', 1, '1.0', 26, 35);
+          -- Publish: gán public_key đúng một lần là thao tác hợp lệ.
+          UPDATE release_artifacts SET public_key = 'apps/ci/aaaa.apk' WHERE id = '00000000-0000-4000-8000-00000000ca01';
+          SQL
+          must_fail() {
+            if psql "$PSQL_URL" -v ON_ERROR_STOP=1 -c "$1" 2> err.txt; then
+              echo "Expected failure but succeeded: $1" && exit 1
+            fi
+            grep -q "release_artifacts is immutable" err.txt || { cat err.txt; exit 1; }
+          }
+          must_fail "UPDATE release_artifacts SET public_key = 'apps/ci/other.apk' WHERE id = '$ARTIFACT';"
+          must_fail "UPDATE release_artifacts SET sha256 = repeat('b', 64) WHERE id = '$ARTIFACT';"
+          must_fail "UPDATE release_artifacts SET version_code = 2 WHERE id = '$ARTIFACT';"
+          must_fail "DELETE FROM release_artifacts WHERE id = '$ARTIFACT';"
+          test "$(psql "$PSQL_URL" -tAc "SELECT sha256 = repeat('a', 64) AND public_key = 'apps/ci/aaaa.apk' FROM release_artifacts WHERE id = '$ARTIFACT';")" = "t"
       - name: Unaccented search works
         run: |
           psql "$PSQL_URL" -v ON_ERROR_STOP=1 -tAc "SELECT to_tsvector('simple', immutable_unaccent('Ghi chú')) @@ plainto_tsquery('simple', 'ghi chu');" | grep -q t
+      - name: Build API dependencies
+        run: pnpm turbo run build --filter=@novastore/api^...
+      # Integration test Phase 2A trên Postgres 16 thật (đồng thời thật, pool nhiều kết nối).
+      - name: Developer identity & ownership integration tests
+        env:
+          INTEGRATION_DATABASE_URL: ${{ env.DATABASE_URL }}
+        run: pnpm --filter @novastore/api test:integration

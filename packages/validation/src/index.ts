@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { DEVELOPER_MEMBER_ROLES, PLATFORM_ROLES } from '@novastore/types';
+import {
+  DEVELOPER_MEMBER_ROLES,
+  DEVELOPER_STATUSES,
+  DEVELOPER_STATUSES_REQUIRING_REASON,
+  PLATFORM_ROLES,
+} from '@novastore/types';
 
 export { z };
 
@@ -43,13 +48,81 @@ export const updateMeSchema = z
   .refine((v) => Object.keys(v).length > 0, { message: 'Cần ít nhất một trường để cập nhật' });
 export type UpdateMeInput = z.infer<typeof updateMeSchema>;
 
+export const uuidSchema = z.uuid('Định danh không hợp lệ');
+
+/** Slug dành riêng: trùng route (`/developers/me`) hoặc dễ bị dùng để mạo danh. */
+export const RESERVED_DEVELOPER_SLUGS = [
+  'me',
+  'admin',
+  'api',
+  'app',
+  'apps',
+  'developer',
+  'developers',
+  'help',
+  'moderator',
+  'novastore',
+  'official',
+  'security',
+  'support',
+  'system',
+] as const;
+
+export const developerSlugSchema = slugSchema.refine(
+  (slug) => !(RESERVED_DEVELOPER_SLUGS as readonly string[]).includes(slug),
+  'Slug này được dành riêng',
+);
+
+const developerDisplayNameSchema = z.string().trim().min(2).max(60);
+const contactEmailSchema = z.email().max(254);
+
+/**
+ * `.strict()`: mọi trường lạ (userId, ownerUserId, status, verificationStatus…)
+ * đều bị từ chối, chặn mass assignment. Danh tính lấy từ JWT phía server.
+ */
 export const createDeveloperSchema = z
   .object({
-    slug: slugSchema,
-    displayName: z.string().trim().min(2).max(60),
-    contactEmail: z.email(),
-    website: httpsUrlSchema.optional(),
+    slug: developerSlugSchema,
+    displayName: developerDisplayNameSchema,
+    contactEmail: contactEmailSchema,
+    website: httpsUrlSchema.max(2048).optional(),
     agreementVersion: z.string().min(1).max(20),
   })
   .strict();
 export type CreateDeveloperInput = z.infer<typeof createDeveloperSchema>;
+
+/** Chỉ các trường hồ sơ; slug, trạng thái, xác minh và thỏa thuận không sửa được. */
+export const updateDeveloperSchema = z
+  .object({
+    displayName: developerDisplayNameSchema.optional(),
+    contactEmail: contactEmailSchema.optional(),
+    website: httpsUrlSchema.max(2048).nullable().optional(),
+  })
+  .strict()
+  .refine((v) => Object.keys(v).length > 0, { message: 'Cần ít nhất một trường để cập nhật' });
+export type UpdateDeveloperInput = z.infer<typeof updateDeveloperSchema>;
+
+export const developerStatusSchema = z.enum(DEVELOPER_STATUSES);
+
+export const changeDeveloperStatusSchema = z
+  .object({
+    status: developerStatusSchema,
+    reason: z.string().trim().min(3).max(500).optional(),
+  })
+  .strict()
+  .refine(
+    (v) =>
+      !(DEVELOPER_STATUSES_REQUIRING_REASON as readonly string[]).includes(v.status) ||
+      v.reason !== undefined,
+    { message: 'Cần lý do khi từ chối, tạm khóa hoặc cấm developer', path: ['reason'] },
+  );
+export type ChangeDeveloperStatusInput = z.infer<typeof changeDeveloperStatusSchema>;
+
+export const adminDeveloperListQuerySchema = z
+  .object({
+    status: developerStatusSchema.optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(20),
+    cursor: uuidSchema.optional(),
+  })
+  .strict();
+export type AdminDeveloperListQuery = z.infer<typeof adminDeveloperListQuerySchema>;

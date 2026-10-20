@@ -69,6 +69,24 @@ Mỗi APK trong bộ test bị reject với đúng mã:
 - [ ] Dependency scan (GitHub Dependabot/`pnpm audit`) không có lỗ hổng High/Critical chưa xử lý.
 - [ ] Đã thử restore backup Postgres thành công trên môi trường tạm.
 
+### Phase 2A — độ phủ kiểm thử bảo mật hiện có
+
+`apps/api/test/integration/developers.int-spec.ts` chạy app NestJS đầy đủ (guard, service, Prisma thật) trên Postgres thật: PGlite khi chạy local (`pnpm test`), Postgres 16 trong job CI `Prisma migrations` qua `INTEGRATION_DATABASE_URL`. Không mock guard hay Prisma.
+
+| Nhóm | Đã kiểm |
+|------|--------|
+| Xác thực | 6 route developer/staff không token → 401 |
+| Chưa có developer account | `/developers/me`, `PATCH`, `/me/status`, `/developer/accounts/:id` → 403 `DEVELOPER_ACCOUNT_REQUIRED`; user thường gọi `/admin/developers` → 403 |
+| Đăng ký | Tạo `pending` + owner + audit; trùng → 409; 6 request đồng thời cùng user → đúng 1 thành công, không account mồ côi; 4 user tranh một slug → đúng 1; slug citext; slug dành riêng; sai agreement |
+| Mass assignment / giả danh | `userId`, `ownerUserId`, `developerAccountId`, `status`, `verificationStatus`, `memberRole` trong body đăng ký → 400; `status`, `slug`, `id`… trong PATCH → 400, DB không đổi; header/query giả danh bị bỏ qua |
+| IDOR | A đọc/sửa account của B → 404 giống hệt id không tồn tại, không lộ email, DB và audit của B không đổi; A bị khóa vẫn nhận 404 |
+| Định danh sai | UUID sai → 400; thiếu id → 404; staff với id không tồn tại → 404 |
+| Vòng đời | Duyệt/từ chối/khóa/mở/cấm; chuyển sai → 409; duyệt hai lần → 409 + đúng 1 audit; thiếu lý do → 400; Moderator không được cấm; developer không tự đổi trạng thái; staff không duyệt account của mình; staff `aal1` → `MFA_REQUIRED` (cả route Phase 1) |
+| Developer bị khóa | `suspended`/`banned`/`rejected` xem được lý do nhưng sửa hồ sơ → 403; mở lại → sửa được; `editor` không sửa được; chỉ `active` có capability `publish` |
+| Audit | Đăng ký, sửa, đổi trạng thái ghi actor, before/after, ip hash, request id; `audit_logs` chặn UPDATE/DELETE |
+
+Đã thử phá có chủ đích (tắt kiểm sở hữu; cho `suspended` sửa hồ sơ): test tương ứng fail, xác nhận test có giá trị.
+
 ## 3. Tiêu chí phi chức năng
 
 - [ ] API đọc catalog p95 < 300 ms với 100 app, 50 RPS (k6).

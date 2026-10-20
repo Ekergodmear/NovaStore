@@ -25,15 +25,26 @@
   | Upload session | 20/giờ/developer account |
 - **Audit**: mọi endpoint đánh dấu ✍ ghi `audit_logs`.
 
-## 2. Identity
+## 2. Identity & Developer account
+
+> **Đã triển khai (Phase 2A).** Tài liệu máy đọc được: `GET /api/openapi.json`, giao diện tại `/api/docs` (bật mặc định ngoài production, cờ `OPENAPI_ENABLED`). Request schema sinh trực tiếp từ Zod trong `packages/validation`.
 
 | Method | Path | Auth | Mô tả |
 |--------|------|------|------|
-| GET | `/me` | U | Profile + roles + developer accounts |
+| GET | `/me` | U | Profile + roles + developer account (kèm `status`) |
 | PATCH | `/me` | U | Sửa display name/avatar |
-| POST | `/developers` ✍ | U | Tạo developer account |
-| GET | `/developers/:slug` | — | Trang công khai của developer |
-| PATCH | `/developers/:id` ✍ | D(owner) | Sửa hồ sơ |
+| POST | `/developers` ✍ | U | Đăng ký developer account; người gọi thành owner; bắt đầu `pending` |
+| GET | `/developers/me` | D | Hồ sơ riêng tư của developer hiện tại |
+| PATCH | `/developers/me` ✍ | D(owner/admin) | Sửa `displayName`, `contactEmail`, `website` |
+| GET | `/developers/me/status` | D | Trạng thái, lý do, quyền hiện hành |
+| GET | `/developers/:slug` | — | Hồ sơ công khai, **chỉ developer `active`**, không có email |
+| GET | `/developer/accounts/:developerAccountId` | D | Như `/developers/me` nhưng theo id |
+| PATCH | `/developer/accounts/:developerAccountId` ✍ | D(owner/admin) | Như `PATCH /developers/me` nhưng theo id |
+
+Quy tắc chung:
+- **Danh tính chỉ lấy từ JWT.** Không endpoint nào nhận `userId`, `developerAccountId` hay `status` từ body/query/header để phân quyền. Body dùng schema `.strict()`: mọi trường lạ → `400 VALIDATION_FAILED`.
+- **Chính sách 403/404:** id sai định dạng → `400 VALIDATION_FAILED`; id không tồn tại **hoặc thuộc developer khác** → `404 NOT_FOUND` với body giống hệt nhau. `403` chỉ dùng cho quyền của chính người gọi (chưa có account, account bị khóa, vai trò không đủ).
+- Rate limit: `POST /developers` 5/phút, các `PATCH` 20/phút (theo IP).
 
 `POST /developers`
 ```json
@@ -42,8 +53,26 @@
   "contactEmail": "dev@acme.vn", "website": "https://acme.vn",
   "agreementVersion": "2026-10" }
 // 201
-{ "id": "…", "slug": "acme-studio", "verificationStatus": "unverified", "status": "active" }
+{ "id": "…", "slug": "acme-studio", "displayName": "Acme Studio", "contactEmail": "dev@acme.vn",
+  "website": "https://acme.vn", "status": "pending", "statusReason": null, "statusChangedAt": null,
+  "verificationStatus": "unverified", "memberRole": "owner", "agreementVersion": "2026-10",
+  "agreementAcceptedAt": "…", "createdAt": "…", "updatedAt": "…",
+  "capabilities": { "canManageProfile": true, "canPublish": false } }
 ```
+
+Mã lỗi riêng:
+| Mã | HTTP | Khi nào |
+|----|------|--------|
+| `DEVELOPER_ACCOUNT_REQUIRED` | 403 | Route developer nhưng user chưa đăng ký |
+| `DEVELOPER_ACCOUNT_EXISTS` | 409 | User đã có developer account (kể cả request đồng thời) |
+| `DEVELOPER_SLUG_TAKEN` | 409 | Slug đã dùng (không phân biệt hoa thường) |
+| `AGREEMENT_VERSION_MISMATCH` | 400 | `agreementVersion` khác phiên bản hiện hành (`2026-10`) |
+| `DEVELOPER_ACCOUNT_NOT_ACTIVE` | 403 | Trạng thái không cho phép thao tác (vd. sửa hồ sơ khi `suspended`) |
+| `DEVELOPER_ROLE_INSUFFICIENT` | 403 | Thành viên `editor` sửa hồ sơ |
+| `INVALID_STATUS_TRANSITION` | 409 | Staff chuyển trạng thái không hợp lệ hoặc trạng thái vừa bị người khác đổi |
+| `CONFLICT_OF_INTEREST` | 403 | Staff đổi trạng thái account mà chính mình là thành viên |
+
+Slug dành riêng (không đăng ký được): `me`, `admin`, `api`, `app`, `apps`, `developer`, `developers`, `help`, `moderator`, `novastore`, `official`, `security`, `support`, `system`.
 
 ## 3. Catalog (công khai)
 
@@ -121,12 +150,27 @@ Kết quả xử lý được trả qua `GET /apps/:id/releases/:releaseId` (pol
 | POST | `/admin/apps/:id/remove` ✍ | A | Gỡ app khỏi store |
 | POST | `/admin/apps/:id/restore` ✍ | A | Khôi phục |
 | POST | `/admin/releases/:id/revoke` ✍ | A | Thu hồi release |
-| POST | `/admin/developers/:id/suspend` ✍ | A | Khóa developer |
+| GET | `/admin/developers` | M | **Đã triển khai.** `?status=&limit=&cursor=`; trả `{ data, nextCursor }` |
+| GET | `/admin/developers/:developerAccountId` | M | **Đã triển khai.** Chi tiết + `allowedTransitions` |
+| POST | `/admin/developers/:developerAccountId/status` ✍ | M (banned: A) | **Đã triển khai.** Đổi trạng thái developer (thay cho `/suspend` trong bản thiết kế đầu) |
 | POST | `/admin/users/:id/roles` ✍ | A | Gán/gỡ moderator/admin |
 | GET | `/admin/audit-logs` | A | Lọc theo actor/target/action |
-| GET | `/admin/dashboard` | M | KPI: pending, mới gửi, bị report, dev hoạt động, tỉ lệ duyệt |
+| GET | `/admin/dashboard` | M | **Đã triển khai (Phase 1).** KPI: pending, mới gửi, bị report, dev hoạt động, tỉ lệ duyệt |
 
 Moderator **không được** approve release của developer account mà họ là member → `403 CONFLICT_OF_INTEREST`. Approve dùng optimistic lock (`expectedStatus: "pending_review"`) để tránh hai moderator xử lý trùng.
+
+`POST /admin/developers/:developerAccountId/status`
+```json
+// request — reason bắt buộc khi status là rejected | suspended | banned
+{ "status": "suspended", "reason": "Vi phạm chính sách nội dung" }
+// 200
+{ "id": "…", "status": "suspended", "statusReason": "Vi phạm chính sách nội dung",
+  "statusChangedAt": "…", "allowedTransitions": ["active", "banned"], "…": "…" }
+```
+- Chuyển hợp lệ: `pending → active | rejected`, `active → suspended | banned`, `suspended → active | banned`. `rejected`, `banned` là trạng thái kết thúc. Sai → `409 INVALID_STATUS_TRANSITION`.
+- `banned` chỉ Admin; Moderator → `403 FORBIDDEN`. Mọi route `/admin/*` cần MFA (`aal2`) khi `REQUIRE_STAFF_MFA` bật (mặc định ở production).
+- Cập nhật có điều kiện `WHERE status = <trạng thái đã đọc>`: hai staff thao tác cùng lúc thì một người nhận `409`.
+- Ghi `audit_logs` (`developer.status.change`) cùng transaction, gồm trạng thái và lý do trước/sau.
 
 ## 6. Download & Update
 

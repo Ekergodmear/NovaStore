@@ -39,10 +39,14 @@ enum DeveloperVerificationStatus {
   @@map("developer_verification_status")
 }
 
+/// Vòng đời: pending → active | rejected; active ↔ suspended; active | suspended → banned.
+/// Chỉ staff (có MFA) đổi được trạng thái; xem docs/ARCHITECTURE.md §4.2.
 enum DeveloperStatus {
+  pending
   active
   suspended
   banned
+  rejected
 
   @@map("developer_status")
 }
@@ -97,7 +101,10 @@ model DeveloperAccount {
   contactEmail        String                      @map("contact_email") @db.Citext
   website             String?
   verificationStatus  DeveloperVerificationStatus @default(unverified) @map("verification_status")
-  status              DeveloperStatus             @default(active)
+  status              DeveloperStatus             @default(pending)
+  /// Lý do staff ghi khi rejected/suspended/banned; hiển thị cho developer.
+  statusReason        String?                     @map("status_reason") @db.VarChar(500)
+  statusChangedAt     DateTime?                   @map("status_changed_at") @db.Timestamptz(6)
   agreementVersion    String                      @map("agreement_version")
   agreementAcceptedAt DateTime                    @map("agreement_accepted_at") @db.Timestamptz(6)
   createdAt           DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -120,7 +127,9 @@ model DeveloperMember {
   user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([developerAccountId, userId])
-  @@index([userId])
+  /// MVP: mỗi user thuộc tối đa một developer account. Chặn đăng ký trùng ở tầng DB,
+  /// kể cả khi nhiều request đồng thời, và làm "developer hiện tại" luôn xác định duy nhất.
+  @@unique([userId])
   @@map("developer_members")
 }
 

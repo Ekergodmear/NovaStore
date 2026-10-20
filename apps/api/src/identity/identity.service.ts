@@ -15,7 +15,7 @@ const userInclude = {
   memberships: {
     select: {
       memberRole: true,
-      developerAccount: { select: { id: true, slug: true, displayName: true } },
+      developerAccount: { select: { id: true, slug: true, displayName: true, status: true } },
     },
   },
 } satisfies Prisma.UserInclude;
@@ -119,6 +119,7 @@ export function toAuthUser(user: UserWithAccess, aal: AuthUser['aal']): AuthUser
       slug: m.developerAccount.slug,
       displayName: m.developerAccount.displayName,
       memberRole: m.memberRole,
+      status: m.developerAccount.status,
     })),
     aal,
   };

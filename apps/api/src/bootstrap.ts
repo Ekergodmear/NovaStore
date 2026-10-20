@@ -3,6 +3,7 @@ import helmet from 'helmet';
 import { Logger } from 'nestjs-pino';
 import { ProblemDetailsFilter } from './common/problem-details.filter';
 import type { Env } from './config/env';
+import { setupOpenApi } from './openapi/openapi';
 
 export const API_PREFIX = 'api/v1';
 
@@ -22,5 +23,6 @@ export function configureApp(app: NestExpressApplication, env: Env): void {
   app.useBodyParser('json', { limit: '1mb' });
   app.setGlobalPrefix(API_PREFIX, { exclude: ['healthz', 'readyz'] });
   app.useGlobalFilters(new ProblemDetailsFilter());
+  if (env.OPENAPI_ENABLED) setupOpenApi(app);
   app.enableShutdownHooks();
 }

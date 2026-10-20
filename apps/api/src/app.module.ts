@@ -6,6 +6,7 @@ import { AdminModule } from './admin/admin.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
 import { ConfigModule } from './config/config.module';
+import { DevelopersModule } from './developers/developers.module';
 import type { Env } from './config/env';
 import { ENV } from './config/tokens';
 import { HealthModule } from './health/health.module';
@@ -52,6 +53,7 @@ const REQUEST_ID_RE = /^[\w.-]{1,128}$/;
     IdentityModule,
     AuthModule,
     AdminModule,
+    DevelopersModule,
     HealthModule,
   ],
 })

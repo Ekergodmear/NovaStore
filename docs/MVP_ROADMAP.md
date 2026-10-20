@@ -37,8 +37,8 @@ gantt
 - **Demo:** đăng nhập ở cả 3 console; user thường bị 403 ở Admin.
 
 ### Phase 2 — Developer Console (Tuần 3–4)
-- Tạo developer account, Developer Agreement.
-- CRUD app (wizard 5 bước), media upload presigned + kiểm định dạng/kích thước ảnh.
+- **2A — Developer identity & ownership (đã triển khai, backend):** đăng ký developer account (Developer Agreement `2026-10`), vòng đời `pending → active/rejected`, `active ↔ suspended`, `banned`; staff duyệt/khóa (MFA); lớp phân quyền sở hữu dùng lại cho 2B+; OpenAPI; integration test trên Postgres thật; CI kiểm `release_artifacts` bất biến. **Chưa có:** giao diện Developer Console/Admin Console cho các API này.
+- 2B+ — CRUD app (wizard 5 bước), media upload presigned + kiểm định dạng/kích thước ảnh.
 - Release draft, upload session vào quarantine, submit → enqueue (worker giả lập trả kết quả cố định).
 - **Demo:** developer tạo app, upload APK, thấy release ở `processing`.
 

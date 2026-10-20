@@ -8,12 +8,14 @@
     "start": "node dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:integration": "vitest run test/integration"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.6",
     "@nestjs/core": "^11.1.6",
     "@nestjs/platform-express": "^11.1.6",
+    "@nestjs/swagger": "^11.4.7",
     "@nestjs/throttler": "^6.4.0",
     "@novastore/database": "workspace:*",
     "@novastore/types": "workspace:*",
@@ -29,6 +31,8 @@
     "rxjs": "^7.8.2"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.3.11",
+    "@electric-sql/pglite-socket": "0.0.16",
     "@nestjs/cli": "^11.0.10",
     "@nestjs/testing": "^11.1.6",
     "@novastore/config": "workspace:*",

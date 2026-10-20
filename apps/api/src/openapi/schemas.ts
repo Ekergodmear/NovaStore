@@ -1,8 +1,14 @@
 import {
+  APP_STATUSES,
+  CONTENT_RATINGS,
   DEVELOPER_MEMBER_ROLES,
   DEVELOPER_STATUSES,
   DEVELOPER_VERIFICATION_STATUSES,
+  type AdminCategoryResponse,
   type AdminDeveloperResponse,
+  type AppCategoryResponse,
+  type DeveloperAppResponse,
+  type DeveloperAppSummary,
   type DeveloperAccountResponse,
   type DeveloperStatusResponse,
   type ProblemDetails,
@@ -10,7 +16,11 @@ import {
 } from '@novastore/types';
 import {
   changeDeveloperStatusSchema,
+  createAppSchema,
+  createCategorySchema,
   createDeveloperSchema,
+  updateAppSchema,
+  updateCategorySchema,
   updateDeveloperSchema,
   z,
 } from '@novastore/validation';
@@ -75,6 +85,60 @@ const adminDeveloperPage = z.object({
   nextCursor: z.uuid().nullable(),
 });
 
+const appStatus = z.enum(APP_STATUSES);
+
+const developerAppResponse = z.object({
+  id: z.uuid(),
+  slug: z.string(),
+  packageName: z.string().nullable(),
+  packageNameReleased: z.boolean(),
+  title: z.string(),
+  shortDescription: z.string(),
+  fullDescription: z.string(),
+  category: z.object({ id: z.uuid(), slug: z.string(), nameVi: z.string(), nameEn: z.string() }),
+  supportEmail: z.string().nullable(),
+  supportUrl: z.string().nullable(),
+  privacyPolicyUrl: z.string().nullable(),
+  contentRating: z.enum(CONTENT_RATINGS),
+  containsAds: z.boolean(),
+  defaultLocale: z.string(),
+  status: appStatus,
+  createdAt: isoDate,
+  updatedAt: isoDate,
+  capabilities: z.object({ canEdit: z.boolean(), canArchive: z.boolean() }),
+});
+
+const developerAppSummary = z.object({
+  id: z.uuid(),
+  slug: z.string(),
+  packageName: z.string().nullable(),
+  title: z.string(),
+  status: appStatus,
+  categorySlug: z.string(),
+  updatedAt: isoDate,
+});
+
+const developerAppPage = z.object({
+  data: z.array(developerAppSummary),
+  nextCursor: z.uuid().nullable(),
+});
+
+const appCategoryResponse = z.object({
+  id: z.uuid(),
+  slug: z.string(),
+  nameVi: z.string(),
+  nameEn: z.string(),
+  icon: z.string().nullable(),
+  sortOrder: z.number().int(),
+});
+
+const adminCategoryResponse = appCategoryResponse.extend({
+  isActive: z.boolean(),
+  appCount: z.number().int(),
+  createdAt: isoDate,
+  updatedAt: isoDate,
+});
+
 const problemDetails = z.object({
   type: z.string(),
   title: z.string(),
@@ -94,6 +158,10 @@ export type OpenApiSchemaChecks = [
   Expect<Equals<z.infer<typeof developerStatusResponse>, DeveloperStatusResponse>>,
   Expect<Equals<z.infer<typeof publicDeveloperProfile>, PublicDeveloperProfile>>,
   Expect<Equals<z.infer<typeof adminDeveloperResponse>, AdminDeveloperResponse>>,
+  Expect<Equals<z.infer<typeof developerAppResponse>, DeveloperAppResponse>>,
+  Expect<Equals<z.infer<typeof developerAppSummary>, DeveloperAppSummary>>,
+  Expect<Equals<z.infer<typeof appCategoryResponse>, AppCategoryResponse>>,
+  Expect<Equals<z.infer<typeof adminCategoryResponse>, AdminCategoryResponse>>,
   Expect<Equals<z.infer<typeof problemDetails>['code'], string>>,
   Expect<Equals<keyof z.infer<typeof problemDetails>, keyof ProblemDetails>>,
 ];
@@ -114,6 +182,15 @@ export const OPENAPI_COMPONENT_SCHEMAS = {
   PublicDeveloperProfile: toOpenApi(publicDeveloperProfile, 'output'),
   AdminDeveloperResponse: toOpenApi(adminDeveloperResponse, 'output'),
   AdminDeveloperPage: toOpenApi(adminDeveloperPage, 'output'),
+  CreateAppRequest: toOpenApi(createAppSchema, 'input'),
+  UpdateAppRequest: toOpenApi(updateAppSchema, 'input'),
+  DeveloperAppResponse: toOpenApi(developerAppResponse, 'output'),
+  DeveloperAppPage: toOpenApi(developerAppPage, 'output'),
+  CreateCategoryRequest: toOpenApi(createCategorySchema, 'input'),
+  UpdateCategoryRequest: toOpenApi(updateCategorySchema, 'input'),
+  AppCategoryList: toOpenApi(z.array(appCategoryResponse), 'output'),
+  AdminCategoryResponse: toOpenApi(adminCategoryResponse, 'output'),
+  AdminCategoryList: toOpenApi(z.array(adminCategoryResponse), 'output'),
   ProblemDetails: toOpenApi(problemDetails, 'output'),
 } as const;
 

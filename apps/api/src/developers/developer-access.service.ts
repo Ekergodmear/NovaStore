@@ -92,6 +92,29 @@ export class DeveloperAccessService {
   ownedWhere(context: DeveloperContext): { developerAccountId: string } {
     return { developerAccountId: context.accountId };
   }
+
+  /**
+   * Gọi đầu mỗi transaction mutation tài nguyên developer: khóa dòng developer_accounts
+   * (`FOR SHARE`) và xác nhận trạng thái vẫn cho phép capability. Staff đổi trạng thái là
+   * UPDATE nên phải chờ transaction này kết thúc — không có khe giữa kiểm tra và ghi.
+   */
+  async lockForMutation(
+    tx: Prisma.TransactionClient,
+    context: DeveloperContext,
+    capability: Exclude<DeveloperCapability, 'read'>,
+  ): Promise<void> {
+    const statuses = statusesFor(capability);
+    const rows = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM developer_accounts
+      WHERE id = ${context.accountId}::uuid AND status::text = ANY(${statuses})
+      FOR SHARE`;
+    if (rows.length === 0) {
+      throw ApiException.forbidden(
+        'DEVELOPER_ACCOUNT_NOT_ACTIVE',
+        'Trạng thái tài khoản nhà phát triển không cho phép thao tác này',
+      );
+    }
+  }
 }
 
 export function assertCapability(context: DeveloperContext, capability: DeveloperCapability) {

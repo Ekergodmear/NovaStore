@@ -143,12 +143,18 @@ enum ContentRating {
   @@map("content_rating")
 }
 
+/// Vòng đời app: docs/ARCHITECTURE.md §4.3. Developer API (Phase 2B) chỉ được
+/// draft|rejected → archived; các chuyển khác do staff/moderation (Phase 2C+/3).
+/// `unlisted`, `removed` giữ từ Phase 1 cho hiển thị và gỡ bởi admin (Phase 3).
 enum AppStatus {
   draft
-  in_review
+  pending_review
   published
+  rejected
+  suspended
   unlisted
   removed
+  archived
 
   @@map("app_status")
 }
@@ -177,6 +183,8 @@ model AppCategory {
   nameEn    String   @map("name_en")
   icon      String?
   sortOrder Int      @default(0) @map("sort_order")
+  /// Ẩn khỏi danh sách cho developer/công khai; app đang dùng vẫn giữ danh mục.
+  isActive  Boolean  @default(true) @map("is_active")
   parentId  String?  @map("parent_id") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -191,8 +199,10 @@ model AppCategory {
 model App {
   id                  String        @id @default(uuid(7)) @db.Uuid
   developerAccountId  String        @map("developer_account_id") @db.Uuid
-  /// Null cho tới khi release đầu tiên được duyệt; sau đó khóa vĩnh viễn, không tái sử dụng.
+  /// Package name developer khai báo khi tạo app; unique toàn hệ thống, không sửa được.
+  /// Chỉ về NULL khi app chưa từng phát hành bị archive (giải phóng tên để đăng ký lại).
   packageName         String?       @unique @map("package_name")
+  /// Package name đã khai báo của app archived chưa từng phát hành (lưu để tra cứu).
   pendingPackageName  String?       @map("pending_package_name")
   /// SHA-256 các chứng chỉ ký hợp lệ (gốc + rotation v3).
   signerLineageSha256 String[]      @default([]) @map("signer_lineage_sha256")
@@ -204,6 +214,9 @@ model App {
   contentRating       ContentRating @default(everyone) @map("content_rating")
   containsAds         Boolean       @default(false) @map("contains_ads")
   privacyPolicyUrl    String?       @map("privacy_policy_url")
+  /// Liên hệ hỗ trợ hiển thị cho người dùng (Phase 2B). Bắt buộc khi tạo qua API.
+  supportEmail        String?       @map("support_email") @db.Citext
+  supportUrl          String?       @map("support_url")
   defaultLocale       String        @default("vi") @map("default_locale")
   status              AppStatus     @default(draft)
   removedReason       String?       @map("removed_reason")
@@ -227,7 +240,8 @@ model App {
   downloadEvents   DownloadEvent[]
   dailyStats       AppDailyStat[]
 
-  @@index([developerAccountId])
+  /// Danh sách app của developer, lọc theo trạng thái, mới cập nhật trước.
+  @@index([developerAccountId, status, updatedAt(sort: Desc)])
   @@index([status, categoryId, downloadCount(sort: Desc)])
   // Khai báo để `prisma migrate dev` không DROP index full-text. Index trigram
   // trên biểu thức immutable_unaccent(lower(title)) nằm ở migration và Prisma bỏ qua.

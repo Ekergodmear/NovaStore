@@ -74,15 +74,15 @@ erDiagram
 
 ### Catalog
 
-**`app_categories`** — `id`, `slug` unique, `name_vi`, `name_en`, `icon`, `sort_order`, `parent_id` null (MVP 1 cấp).
+**`app_categories`** — `id`, `slug` unique (không sửa được), `name_vi`, `name_en`, `icon`, `sort_order`, `is_active` bool default `true` (Phase 2B: ẩn thay vì xóa khi đang có app), `parent_id` null (MVP 1 cấp). Chỉ Admin quản lý; developer và trang công khai chỉ thấy danh mục `is_active`.
 
 **`apps`**
 | Cột | Kiểu | Ghi chú |
 |-----|------|--------|
 | id | uuid PK | |
-| developer_account_id | uuid FK | |
-| package_name | text unique **null** | null cho tới khi release đầu tiên được duyệt rồi khóa; unique toàn hệ thống |
-| pending_package_name | text null | từ APK bản nháp đầu tiên |
+| developer_account_id | uuid FK | **Bất biến** (trigger `apps_identity_guard`): không chuyển quyền sở hữu qua UPDATE |
+| package_name | text unique null | Developer khai báo khi tạo app (Phase 2B); unique toàn hệ thống; CHECK định dạng Android. **Bất biến** (trigger): chỉ gán khi đang NULL, hoặc về NULL khi app chưa từng phát hành chuyển sang `archived` |
+| pending_package_name | text null | Package name đã giải phóng của app archived chưa từng phát hành (lưu để tra cứu) |
 | signer_lineage_sha256 | text[] | danh sách SHA-256 chứng chỉ hợp lệ (gốc + rotation) |
 | slug | citext unique | |
 | title | text (≤ 50) | |
@@ -91,9 +91,11 @@ erDiagram
 | category_id | uuid FK | |
 | content_rating | enum (`everyone`,`teen`,`mature`) | tự khai, moderator xác nhận |
 | contains_ads | bool | tự khai |
-| privacy_policy_url | text | bắt buộc nếu xin quyền nhạy cảm |
+| privacy_policy_url | text null | https; bắt buộc nếu xin quyền nhạy cảm (kiểm ở Phase 3) |
+| support_email | citext null | Phase 2B; API bắt buộc khi tạo app |
+| support_url | text null | Phase 2B; https |
 | default_locale | text default `vi` | |
-| status | enum `app_status` (`draft`,`in_review`,`published`,`unlisted`,`removed`) | |
+| status | enum `app_status` (`draft`,`pending_review`,`published`,`rejected`,`suspended`,`unlisted`,`removed`,`archived`) | Vòng đời: [ARCHITECTURE.md §4.3](ARCHITECTURE.md#43-vòng-đời-ứng-dụng-phase-2b--đã-triển-khai) |
 | removed_reason | text null | |
 | current_release_id | uuid FK null | release đang phân phối |
 | rating_avg | numeric(2,1) | denormalized |
@@ -101,7 +103,13 @@ erDiagram
 | download_count | bigint | denormalized từ stats |
 | search_vector | tsvector | generated: unaccent(title) A, developer name B, short_desc B, full_desc C |
 
-Index: GIN(`search_vector`), GIN trigram(`title`), (`status`, `category_id`, `download_count desc`).
+Index: GIN(`search_vector`), GIN trigram(`title`), (`status`, `category_id`, `download_count desc`), (`developer_account_id`, `status`, `updated_at desc`) cho danh sách app của developer.
+
+**Migration Phase 2B** (không đổi dữ liệu hiện có):
+1. `20261020000200_app_status_lifecycle` — `RENAME VALUE 'in_review' TO 'pending_review'` (hàng cũ tự mang giá trị mới, không ép kiểu hay tạo lại enum), thêm `rejected`, `suspended`, `archived`.
+2. `20261020000300_app_management` — `app_categories.is_active`; `apps.support_email`, `apps.support_url`; thay index `apps(developer_account_id)` bằng index ghép; CHECK `apps_package_name_format`; trigger `apps_identity_guard`. Dữ liệu cũ vi phạm CHECK → migration dừng và rollback.
+
+Đã kiểm chứng trên Postgres (PGlite): DB trạng thái 2A có app `in_review` nâng cấp thành `pending_review`, dữ liệu giữ nguyên; trigger và CHECK hoạt động; `prisma migrate deploy` (5 migration) + `drift-check` sạch.
 
 **`app_media`** — `id`, `app_id`, `type` enum (`icon`,`feature_graphic`,`screenshot_phone`,`screenshot_tablet`), `r2_key`, `width`, `height`, `sha256`, `sort_order`, `status` (`pending`,`approved`,`rejected`). Media cũng phải được moderator duyệt cùng release.
 

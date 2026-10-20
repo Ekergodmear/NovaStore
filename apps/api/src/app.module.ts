@@ -3,6 +3,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 import { randomUUID } from 'node:crypto';
 import { AdminModule } from './admin/admin.module';
+import { AppsModule } from './apps/apps.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
 import { ConfigModule } from './config/config.module';
@@ -54,6 +55,7 @@ const REQUEST_ID_RE = /^[\w.-]{1,128}$/;
     AuthModule,
     AdminModule,
     DevelopersModule,
+    AppsModule,
     HealthModule,
   ],
 })

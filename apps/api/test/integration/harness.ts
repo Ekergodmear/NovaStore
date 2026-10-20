@@ -26,6 +26,7 @@ export interface IntegrationApp {
     get(path: string): request.Test;
     post(path: string): request.Test;
     patch(path: string): request.Test;
+    delete(path: string): request.Test;
   };
   /** User mới (chưa có bản ghi; AuthGuard tạo ở request đầu tiên). */
   newUser(options?: { aal?: 'aal1' | 'aal2' }): Promise<TestUser>;
@@ -70,6 +71,7 @@ export async function createIntegrationApp(): Promise<IntegrationApp> {
       get: (path: string) => agent.get(path).set('X-Forwarded-For', randomIp()),
       post: (path: string) => agent.post(path).set('X-Forwarded-For', randomIp()),
       patch: (path: string) => agent.patch(path).set('X-Forwarded-For', randomIp()),
+      delete: (path: string) => agent.delete(path).set('X-Forwarded-For', randomIp()),
     };
   };
 
@@ -112,6 +114,78 @@ export function developerBody(overrides: Record<string, unknown> = {}) {
     contactEmail: `contact-${suffix}@novastore.test`,
     website: 'https://studio.example.com',
     agreementVersion: '2026-10',
+    ...overrides,
+  };
+}
+
+/** Đăng ký developer qua API; `status` khác `pending` được staff (admin, MFA) chuyển qua API. */
+export async function createDeveloper(
+  t: IntegrationApp,
+  status: 'pending' | 'active' | 'suspended' | 'banned' | 'rejected' = 'active',
+) {
+  const user = await t.newUser();
+  const res = await t
+    .http()
+    .post('/api/v1/developers')
+    .set('Authorization', `Bearer ${user.token}`)
+    .send(developerBody());
+  if (res.status !== 201)
+    throw new Error(`register failed: ${res.status} ${JSON.stringify(res.body)}`);
+  const accountId = res.body.id as string;
+  const path: Record<typeof status, Array<[string, string?]>> = {
+    pending: [],
+    active: [['active']],
+    suspended: [['active'], ['suspended', 'Tạm khóa kiểm thử']],
+    banned: [['active'], ['banned', 'Cấm kiểm thử']],
+    rejected: [['rejected', 'Từ chối kiểm thử']],
+  };
+  for (const [next, reason] of path[status]) {
+    await setDeveloperStatus(t, accountId, next, reason);
+  }
+  return { user, accountId };
+}
+
+export async function setDeveloperStatus(
+  t: IntegrationApp,
+  accountId: string,
+  status: string,
+  reason?: string,
+) {
+  const admin = await t.newStaff('admin');
+  const res = await t
+    .http()
+    .post(`/api/v1/admin/developers/${accountId}/status`)
+    .set('Authorization', `Bearer ${admin.token}`)
+    .send(reason ? { status, reason } : { status });
+  if (res.status !== 200) {
+    throw new Error(`status ${status} failed: ${res.status} ${JSON.stringify(res.body)}`);
+  }
+}
+
+/** Danh mục tạo thẳng trong DB (dữ liệu nền cho test app). */
+export async function createCategory(t: IntegrationApp, options: { isActive?: boolean } = {}) {
+  const suffix = randomUUID().slice(0, 8);
+  return t.prisma.appCategory.create({
+    data: {
+      slug: `cat-${suffix}`,
+      nameVi: `Danh mục ${suffix}`,
+      nameEn: `Category ${suffix}`,
+      isActive: options.isActive ?? true,
+    },
+  });
+}
+
+export function appBody(categoryId: string, overrides: Record<string, unknown> = {}) {
+  const suffix = randomUUID().replace(/-/g, '').slice(0, 10);
+  return {
+    packageName: `vn.test.app${suffix}`,
+    title: `App ${suffix}`,
+    shortDescription: 'Ứng dụng kiểm thử ngắn gọn',
+    fullDescription: 'Mô tả đầy đủ của ứng dụng kiểm thử, đủ dài để hợp lệ.',
+    categoryId,
+    supportEmail: `support-${suffix}@novastore.test`,
+    supportUrl: 'https://support.example.com',
+    privacyPolicyUrl: 'https://example.com/privacy',
     ...overrides,
   };
 }

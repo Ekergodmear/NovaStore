@@ -87,6 +87,25 @@ Mỗi APK trong bộ test bị reject với đúng mã:
 
 Đã thử phá có chủ đích (tắt kiểm sở hữu; cho `suspended` sửa hồ sơ): test tương ứng fail, xác nhận test có giá trị.
 
+### Phase 2B — độ phủ kiểm thử quản lý ứng dụng
+
+`apps/api/test/integration/apps.int-spec.ts` (cùng hạ tầng: app NestJS đầy đủ trên Postgres thật, không mock guard hay Prisma).
+
+| Nhóm | Đã kiểm |
+|------|--------|
+| Tạo app | Developer active tạo `draft`, chủ sở hữu lấy từ server, slug sinh từ package, audit `app.create` |
+| Package name | Trùng → 409 (kể cả khác developer); root dành riêng → 400; 5 developer tranh một package đồng thời → đúng 1; một developer tạo 5 app đồng thời → cả 5; slug trùng → thêm hậu tố |
+| Danh mục | Không tồn tại, sai định dạng, đang ẩn → 400; chuyển sang danh mục ẩn → 400 |
+| Validation | Tên, mô tả (độ dài), URL https, email, contentRating, thiếu supportEmail → 400 |
+| Phân quyền | Không token → 401; chưa là developer → 403; developer `pending/suspended/banned/rejected` không tạo được (DB không có app); developer bị khóa xem được nhưng không sửa hay archive |
+| IDOR | GET/PATCH/archive app của developer khác → 404 giống hệt id không tồn tại, không lộ package, DB và audit không đổi; developer bị khóa dò vẫn 404; query lạ → 400, header giả bị bỏ qua |
+| Mass assignment | 8 trường khi tạo, 6 trường khi sửa (packageName, developerAccountId, status, slug…) → 400, DB không đổi; trigger DB chặn chuyển chủ sở hữu và đổi package ngoài API |
+| Vòng đời | Sửa khi không `draft` → 409 (5 trạng thái); archive từ `draft`/`rejected` được, từ 4 trạng thái khác → 409; archive đồng thời hai lần → 1 thành công, 1 audit; không có endpoint publish/approve/submit |
+| Khóa giữa chừng | Context cũ (developer vừa bị khóa) gọi thẳng service tạo/sửa/archive → 403 nhờ `lockForMutation`, DB không đổi |
+| Danh mục (Admin) | Tạo/sửa/ẩn/xóa + audit; slug trùng → 409; xóa khi đang có app → 409; moderator và developer → 403; admin chưa MFA → 403 |
+
+Thử phá có chủ đích: bỏ lọc sở hữu khi đọc → 2 test fail; bỏ `lockForMutation` → 2 test fail; cho sửa app không phải draft → 5 test fail.
+
 ## 3. Tiêu chí phi chức năng
 
 - [ ] API đọc catalog p95 < 300 ms với 100 app, 50 RPS (k6).

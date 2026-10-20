@@ -8,7 +8,9 @@ Tài liệu thiết kế nằm trong [docs/](docs/). Bắt đầu từ [PRD](doc
 
 **Phase 1 (Foundation)**: monorepo, schema DB, xác thực Supabase, RBAC, audit log, design system, CI.
 
-**Phase 2A (backend)**: đăng ký developer account, vòng đời trạng thái do staff duyệt, phân quyền theo quyền sở hữu, OpenAPI tại `/api/docs`. Xem [MVP_ROADMAP](docs/MVP_ROADMAP.md).
+**Phase 2A (backend)**: đăng ký developer account, vòng đời trạng thái do staff duyệt, phân quyền theo quyền sở hữu, OpenAPI tại `/api/docs`.
+
+**Phase 2B (backend)**: tạo và quản lý app nháp, vòng đời app, archive, Admin quản lý danh mục. Xem [MVP_ROADMAP](docs/MVP_ROADMAP.md).
 
 ## Cấu trúc
 

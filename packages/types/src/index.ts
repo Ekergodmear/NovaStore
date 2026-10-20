@@ -22,8 +22,45 @@ export const RELEASE_STATUSES = [
 ] as const;
 export type ReleaseStatus = (typeof RELEASE_STATUSES)[number];
 
-export const APP_STATUSES = ['draft', 'in_review', 'published', 'unlisted', 'removed'] as const;
+export const APP_STATUSES = [
+  'draft',
+  'pending_review',
+  'published',
+  'rejected',
+  'suspended',
+  'unlisted',
+  'removed',
+  'archived',
+] as const;
 export type AppStatus = (typeof APP_STATUSES)[number];
+
+/** Trạng thái app mà developer được sửa metadata. */
+export const APP_EDITABLE_STATUSES = ['draft'] as const satisfies readonly AppStatus[];
+
+/**
+ * Chuyển trạng thái developer được tự thực hiện (Phase 2B: chỉ archive).
+ * Gửi duyệt (draft → pending_review) là Phase 2C; duyệt/từ chối/tạm khóa do staff (Phase 3).
+ */
+export const APP_DEVELOPER_TRANSITIONS: Readonly<Record<AppStatus, readonly AppStatus[]>> = {
+  draft: ['archived'],
+  pending_review: [],
+  published: [],
+  rejected: ['archived'],
+  suspended: [],
+  unlisted: [],
+  removed: [],
+  archived: [],
+};
+
+export function isAppDeveloperTransitionAllowed(from: AppStatus, to: AppStatus): boolean {
+  return APP_DEVELOPER_TRANSITIONS[from].includes(to);
+}
+
+export const CONTENT_RATINGS = ['everyone', 'teen', 'mature'] as const;
+export type ContentRating = (typeof CONTENT_RATINGS)[number];
+
+export const APP_LOCALES = ['vi', 'en'] as const;
+export type AppLocale = (typeof APP_LOCALES)[number];
 
 export const DEVELOPER_MEMBER_ROLES = ['owner', 'admin', 'editor'] as const;
 export type DeveloperMemberRole = (typeof DEVELOPER_MEMBER_ROLES)[number];
@@ -96,6 +133,14 @@ export const ERROR_CODES = [
   'AGREEMENT_VERSION_MISMATCH',
   'INVALID_STATUS_TRANSITION',
   'CONFLICT_OF_INTEREST',
+  // App management (Phase 2B)
+  'PACKAGE_NAME_TAKEN',
+  'PACKAGE_NAME_RESERVED',
+  'INVALID_CATEGORY',
+  'APP_NOT_EDITABLE',
+  'INVALID_APP_STATUS_TRANSITION',
+  'CATEGORY_SLUG_TAKEN',
+  'CATEGORY_IN_USE',
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];
 
@@ -195,4 +240,60 @@ export interface AdminDashboardResponse {
 export interface CursorPage<T> {
   data: T[];
   nextCursor: string | null;
+}
+
+/** Danh mục cho developer/công khai (chỉ danh mục đang hiển thị). */
+export interface AppCategoryResponse {
+  id: string;
+  slug: string;
+  nameVi: string;
+  nameEn: string;
+  icon: string | null;
+  sortOrder: number;
+}
+
+/** Danh mục cho Admin: thêm trạng thái hiển thị và số app đang dùng. */
+export interface AdminCategoryResponse extends AppCategoryResponse {
+  isActive: boolean;
+  appCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AppCapabilities {
+  canEdit: boolean;
+  canArchive: boolean;
+}
+
+/** App của developer hiện tại (riêng tư). */
+export interface DeveloperAppResponse {
+  id: string;
+  slug: string;
+  /** Package name đã khai báo; app archived chưa từng phát hành thì tên đã được giải phóng. */
+  packageName: string | null;
+  packageNameReleased: boolean;
+  title: string;
+  shortDescription: string;
+  fullDescription: string;
+  category: { id: string; slug: string; nameVi: string; nameEn: string };
+  supportEmail: string | null;
+  supportUrl: string | null;
+  privacyPolicyUrl: string | null;
+  contentRating: ContentRating;
+  containsAds: boolean;
+  defaultLocale: string;
+  status: AppStatus;
+  createdAt: string;
+  updatedAt: string;
+  capabilities: AppCapabilities;
+}
+
+export interface DeveloperAppSummary {
+  id: string;
+  slug: string;
+  packageName: string | null;
+  title: string;
+  status: AppStatus;
+  categorySlug: string;
+  updatedAt: string;
 }

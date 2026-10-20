@@ -5,6 +5,7 @@ import { createBrowserClient } from '@supabase/ssr';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { getPublicConfig } from './config';
+import { safeNext } from './safe-next';
 
 function createSupabaseBrowserClient() {
   const config = getPublicConfig();
@@ -118,9 +119,4 @@ export function SignOutButton() {
       Đăng xuất
     </Button>
   );
-}
-
-/** Chỉ cho phép redirect nội bộ để tránh open redirect. */
-function safeNext(next: string): string {
-  return next.startsWith('/') && !next.startsWith('//') ? next : '/';
 }

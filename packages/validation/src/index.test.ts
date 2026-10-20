@@ -1,13 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import {
+  APP_DEVELOPER_TRANSITIONS,
+  APP_STATUSES,
   DEVELOPER_STATUSES,
   DEVELOPER_STATUS_TRANSITIONS,
+  isAppDeveloperTransitionAllowed,
   isDeveloperStatusTransitionAllowed,
+  type AppStatus,
   type DeveloperStatus,
 } from '@novastore/types';
 import {
   changeDeveloperStatusSchema,
+  createAppSchema,
+  createCategorySchema,
   createDeveloperSchema,
+  isReservedPackageName,
+  updateAppSchema,
+  updateCategorySchema,
   packageNameSchema,
   slugSchema,
   updateDeveloperSchema,
@@ -142,5 +151,97 @@ describe('DEVELOPER_STATUS_TRANSITIONS', () => {
   it('banned và rejected là trạng thái kết thúc', () => {
     expect(DEVELOPER_STATUS_TRANSITIONS.banned).toEqual([]);
     expect(DEVELOPER_STATUS_TRANSITIONS.rejected).toEqual([]);
+  });
+});
+
+describe('app schemas (Phase 2B)', () => {
+  const valid = {
+    packageName: 'vn.acme.notes',
+    title: 'Acme Notes',
+    shortDescription: 'Ghi chú nhanh và gọn',
+    fullDescription: 'Ứng dụng ghi chú đồng bộ đám mây cho mọi người.',
+    categoryId: '0199f0a2-0000-7000-8000-000000000001',
+    supportEmail: 'support@acme.vn',
+  };
+
+  it('chấp nhận dữ liệu hợp lệ tối thiểu', () => {
+    expect(createAppSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it.each(['developerAccountId', 'status', 'slug', 'id', 'currentReleaseId', 'ratingAvg'])(
+    'createAppSchema từ chối trường %s (mass assignment)',
+    (field) => {
+      expect(createAppSchema.safeParse({ ...valid, [field]: 'x' }).success).toBe(false);
+    },
+  );
+
+  it.each([
+    ['packageName', 'notapackage'],
+    ['title', 'x'],
+    ['shortDescription', 'ngắn'],
+    ['fullDescription', 'x'.repeat(4001)],
+    ['privacyPolicyUrl', 'http://acme.vn/privacy'],
+    ['categoryId', 'not-a-uuid'],
+    ['supportEmail', 'nope'],
+    ['contentRating', 'adults'],
+    ['defaultLocale', 'fr'],
+  ])('createAppSchema từ chối %s=%s', (field, value) => {
+    expect(createAppSchema.safeParse({ ...valid, [field]: value }).success).toBe(false);
+  });
+
+  it('updateAppSchema: rỗng, packageName, status → lỗi; null cho URL được phép', () => {
+    expect(updateAppSchema.safeParse({}).success).toBe(false);
+    expect(updateAppSchema.safeParse({ packageName: 'vn.x.y' }).success).toBe(false);
+    expect(updateAppSchema.safeParse({ status: 'published' }).success).toBe(false);
+    expect(updateAppSchema.safeParse({ supportUrl: null, privacyPolicyUrl: null }).success).toBe(
+      true,
+    );
+    expect(updateAppSchema.safeParse({ supportEmail: null }).success).toBe(false);
+  });
+
+  it.each([
+    ['com.google.android.youtube', true],
+    ['android', true],
+    ['androidx.core', true],
+    ['COM.GOOGLE.x', true],
+    ['vn.novastore.store', true],
+    ['com.googleplus.app', false],
+    ['vn.acme.notes', false],
+  ])('isReservedPackageName(%s) = %s', (name, expected) => {
+    expect(isReservedPackageName(name)).toBe(expected);
+  });
+
+  it('category schemas', () => {
+    expect(
+      createCategorySchema.safeParse({ slug: 'tools', nameVi: 'Công cụ', nameEn: 'Tools' }).success,
+    ).toBe(true);
+    expect(
+      createCategorySchema.safeParse({ slug: 'tools', nameVi: 'Cc', nameEn: 'Tt', isActive: false })
+        .success,
+    ).toBe(false);
+    expect(
+      createCategorySchema.safeParse({
+        slug: 'tools',
+        nameVi: 'Cc',
+        nameEn: 'Tt',
+        icon: 'Bad Icon',
+      }).success,
+    ).toBe(false);
+    expect(updateCategorySchema.safeParse({ slug: 'renamed' }).success).toBe(false);
+    expect(updateCategorySchema.safeParse({ isActive: false }).success).toBe(true);
+  });
+});
+
+describe('APP_DEVELOPER_TRANSITIONS', () => {
+  it('developer chỉ được archive từ draft hoặc rejected', () => {
+    const all = APP_STATUSES.flatMap((from) =>
+      APP_STATUSES.map((to) => [from, to] as [AppStatus, AppStatus]),
+    );
+    const actual = all.filter(([from, to]) => isAppDeveloperTransitionAllowed(from, to));
+    expect(actual).toEqual([
+      ['draft', 'archived'],
+      ['rejected', 'archived'],
+    ]);
+    expect(APP_DEVELOPER_TRANSITIONS.archived).toEqual([]);
   });
 });

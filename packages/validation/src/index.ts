@@ -1,5 +1,8 @@
 import { z } from 'zod';
 import {
+  APP_LOCALES,
+  APP_STATUSES,
+  CONTENT_RATINGS,
   DEVELOPER_MEMBER_ROLES,
   DEVELOPER_STATUSES,
   DEVELOPER_STATUSES_REQUIRING_REASON,
@@ -126,3 +129,115 @@ export const adminDeveloperListQuerySchema = z
   })
   .strict();
 export type AdminDeveloperListQuery = z.infer<typeof adminDeveloperListQuerySchema>;
+
+// ───────────────────────────── App management (Phase 2B) ─────────────────────────────
+
+/**
+ * Tiền tố package name không cho developer tự khai báo: nền tảng Android và một số
+ * thương hiệu dễ bị mạo danh. Danh sách khởi đầu; xác minh quyền sở hữu là Phase 3.
+ */
+export const RESERVED_PACKAGE_ROOTS = [
+  'android',
+  'androidx',
+  'com.android',
+  'com.google',
+  'com.facebook',
+  'com.whatsapp',
+  'com.instagram',
+  'com.microsoft',
+  'com.apple',
+  'com.samsung',
+  'com.zing.zalo',
+  'com.novastore',
+  'vn.novastore',
+] as const;
+
+/** `true` nếu package trùng hoặc nằm dưới một root dành riêng (không phân biệt hoa thường). */
+export function isReservedPackageName(packageName: string): boolean {
+  const name = packageName.toLowerCase();
+  return RESERVED_PACKAGE_ROOTS.some((root) => name === root || name.startsWith(`${root}.`));
+}
+
+const appTitleSchema = z.string().trim().min(2).max(50);
+const appShortDescriptionSchema = z.string().trim().min(10).max(80);
+const appFullDescriptionSchema = z.string().trim().min(20).max(4000);
+const optionalHttpsUrl = httpsUrlSchema.max(2048);
+
+/**
+ * `.strict()` chặn mass assignment: developerAccountId, status, slug, id, rating…
+ * đều bị từ chối. Chủ sở hữu luôn là developer hiện tại (resolve phía server).
+ */
+export const createAppSchema = z
+  .object({
+    packageName: packageNameSchema,
+    title: appTitleSchema,
+    shortDescription: appShortDescriptionSchema,
+    fullDescription: appFullDescriptionSchema,
+    categoryId: uuidSchema,
+    supportEmail: z.email().max(254),
+    supportUrl: optionalHttpsUrl.optional(),
+    privacyPolicyUrl: optionalHttpsUrl.optional(),
+    contentRating: z.enum(CONTENT_RATINGS).optional(),
+    containsAds: z.boolean().optional(),
+    defaultLocale: z.enum(APP_LOCALES).optional(),
+  })
+  .strict();
+export type CreateAppInput = z.infer<typeof createAppSchema>;
+
+/** Chỉ metadata; packageName, status, chủ sở hữu và slug không sửa được. */
+export const updateAppSchema = z
+  .object({
+    title: appTitleSchema.optional(),
+    shortDescription: appShortDescriptionSchema.optional(),
+    fullDescription: appFullDescriptionSchema.optional(),
+    categoryId: uuidSchema.optional(),
+    supportEmail: z.email().max(254).optional(),
+    supportUrl: optionalHttpsUrl.nullable().optional(),
+    privacyPolicyUrl: optionalHttpsUrl.nullable().optional(),
+    contentRating: z.enum(CONTENT_RATINGS).optional(),
+    containsAds: z.boolean().optional(),
+    defaultLocale: z.enum(APP_LOCALES).optional(),
+  })
+  .strict()
+  .refine((v) => Object.keys(v).length > 0, { message: 'Cần ít nhất một trường để cập nhật' });
+export type UpdateAppInput = z.infer<typeof updateAppSchema>;
+
+export const appStatusSchema = z.enum(APP_STATUSES);
+
+export const developerAppListQuerySchema = z
+  .object({
+    status: appStatusSchema.optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(20),
+    cursor: uuidSchema.optional(),
+  })
+  .strict();
+export type DeveloperAppListQuery = z.infer<typeof developerAppListQuerySchema>;
+
+const categoryNameSchema = z.string().trim().min(2).max(60);
+const categoryIconSchema = z
+  .string()
+  .regex(/^[a-z0-9-]{1,40}$/, 'Icon là tên biểu tượng: a-z, 0-9, gạch ngang');
+
+export const createCategorySchema = z
+  .object({
+    slug: slugSchema,
+    nameVi: categoryNameSchema,
+    nameEn: categoryNameSchema,
+    icon: categoryIconSchema.optional(),
+    sortOrder: z.number().int().min(0).max(10_000).optional(),
+  })
+  .strict();
+export type CreateCategoryInput = z.infer<typeof createCategorySchema>;
+
+/** Slug danh mục không sửa được (đang nằm trong URL công khai). */
+export const updateCategorySchema = z
+  .object({
+    nameVi: categoryNameSchema.optional(),
+    nameEn: categoryNameSchema.optional(),
+    icon: categoryIconSchema.nullable().optional(),
+    sortOrder: z.number().int().min(0).max(10_000).optional(),
+    isActive: z.boolean().optional(),
+  })
+  .strict()
+  .refine((v) => Object.keys(v).length > 0, { message: 'Cần ít nhất một trường để cập nhật' });
+export type UpdateCategoryInput = z.infer<typeof updateCategorySchema>;

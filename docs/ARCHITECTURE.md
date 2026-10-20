@@ -143,6 +143,35 @@ Nguyên tắc:
 2. **Kiểm sở hữu trước capability** trên route theo id: developer bị khóa gọi id của người khác vẫn nhận `404`, không biết được id đó có tồn tại.
 3. **Chống mass assignment** bằng Zod `.strict()` và ánh xạ từng trường được phép sang Prisma `data`.
 4. **Đồng thời**: unique constraint ở DB (`developer_members.user_id`, `developer_accounts.slug`) là chốt cuối; lỗi `P2002` được ánh xạ sang `409` có mã.
+5. **Khóa trong transaction** (Phase 2B): `lockForMutation(tx, context, capability)` chạy `SELECT … FROM developer_accounts … FOR SHARE` đầu mỗi transaction ghi tài nguyên developer. Staff đổi trạng thái developer là UPDATE nên phải chờ; developer bị khóa giữa chừng không ghi lọt được. Danh mục được khóa tương tự khi gán cho app.
+
+### 4.3 Vòng đời ứng dụng (Phase 2B — đã triển khai)
+
+```mermaid
+stateDiagram-v2
+  [*] --> draft: POST /developer/apps
+  draft --> archived: developer (2B)
+  rejected --> archived: developer (2B)
+  draft --> pending_review: gửi duyệt (Phase 2C, chưa có)
+  pending_review --> published: moderator (Phase 3)
+  pending_review --> rejected: moderator (Phase 3)
+  published --> suspended: staff (Phase 3)
+  archived --> [*]
+```
+
+| Trạng thái | Developer sửa metadata | Developer archive | Ghi chú |
+|-----------|:---:|:---:|--------|
+| `draft` | ✓ | ✓ | Trạng thái khởi đầu |
+| `pending_review` | ✗ | ✗ | Đổi tên từ `in_review` (Phase 1) |
+| `published` | ✗ | ✗ | |
+| `rejected` | ✗ | ✓ | |
+| `suspended` | ✗ | ✗ | Staff tạm khóa |
+| `unlisted`, `removed` | ✗ | ✗ | Giữ từ Phase 1 cho hiển thị và gỡ bởi admin (Phase 3) |
+| `archived` | ✗ | ✗ | Kết thúc; mặc định ẩn khỏi danh sách |
+
+- Developer API **không có** endpoint đổi trạng thái tùy ý: chỉ có `POST /developer/apps/:id/archive`. Body PATCH dùng `.strict()` nên `status` bị từ chối.
+- Bảng chuyển cho developer nằm ở `packages/types` (`APP_DEVELOPER_TRANSITIONS`); các chuyển của staff và moderation là thiết kế cho Phase 2C/3, chưa triển khai.
+- Tạo, sửa, archive app cần developer `active` (capability `publish`); developer bị khóa vẫn xem được app của mình.
 
 ## 5. Luồng dữ liệu chính
 

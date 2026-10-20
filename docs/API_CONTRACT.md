@@ -78,7 +78,7 @@ Slug dành riêng (không đăng ký được): `me`, `admin`, `api`, `app`, `ap
 
 | Method | Path | Auth | Mô tả |
 |--------|------|------|------|
-| GET | `/categories` | — | Danh mục |
+| GET | `/categories` | — | **Đã triển khai (2B).** Danh mục đang hiển thị (`isActive`), theo `sortOrder` |
 | GET | `/apps` | — | Danh sách/tìm kiếm: `q`, `category`, `developer`, `sort=popular\|new\|rating` |
 | GET | `/apps/:idOrSlug` | — | Chi tiết app (chỉ `published`/`unlisted`) |
 | GET | `/apps/:id/releases` | — | Lịch sử phiên bản đã publish (changelog) |
@@ -101,11 +101,53 @@ Slug dành riêng (không đăng ký được): `me`, `admin`, `api`, `app`, `ap
 
 ## 4. Developer — App & Release
 
+### 4.1 Quản lý app (Phase 2B — đã triển khai)
+
+> Đường dẫn thực tế dùng tiền tố `/developer/apps` (thay cho `/apps` trong bản thiết kế đầu) để tách rõ API riêng tư của developer khỏi catalog công khai `/apps`.
+
 | Method | Path | Auth | Mô tả |
 |--------|------|------|------|
-| GET | `/developer/apps` | D | App của các developer account mình thuộc về |
-| POST | `/apps` ✍ | D | Tạo app (draft) |
-| PATCH | `/apps/:id` ✍ | D | Sửa metadata (đổi listing app đã publish → cần duyệt lại media/text) |
+| POST | `/developer/apps` ✍ | D **active** | Tạo app `draft`; chủ sở hữu = developer hiện tại |
+| GET | `/developer/apps` | D (mọi trạng thái) | App của mình; `?status=&limit=&cursor=`; mặc định ẩn `archived` |
+| GET | `/developer/apps/:appId` | D (mọi trạng thái) | Chi tiết app của mình |
+| PATCH | `/developer/apps/:appId` ✍ | D **active**, app `draft` | Sửa metadata |
+| POST | `/developer/apps/:appId/archive` ✍ | D **active**, app `draft`/`rejected` | Lưu trữ (không xóa cứng) |
+
+`POST /developer/apps`
+```json
+// request — trường lạ (developerAccountId, status, slug, id…) → 400
+{ "packageName": "vn.acme.notes", "title": "Acme Notes",
+  "shortDescription": "Ghi chú nhanh và gọn",
+  "fullDescription": "Ứng dụng ghi chú đồng bộ đám mây…",
+  "categoryId": "…", "supportEmail": "support@acme.vn",
+  "supportUrl": "https://acme.vn/help", "privacyPolicyUrl": "https://acme.vn/privacy",
+  "contentRating": "everyone", "containsAds": false, "defaultLocale": "vi" }
+// 201
+{ "id": "…", "slug": "vn-acme-notes", "packageName": "vn.acme.notes", "packageNameReleased": false,
+  "title": "Acme Notes", "…": "…", "category": { "id": "…", "slug": "productivity", "nameVi": "…", "nameEn": "…" },
+  "status": "draft", "capabilities": { "canEdit": true, "canArchive": true } }
+```
+
+Quy tắc:
+- **Validation:** `packageName` theo định dạng Android, unique toàn hệ thống (DB), không thuộc root dành riêng (`android`, `androidx`, `com.android`, `com.google`, `com.facebook`, `com.whatsapp`, `com.instagram`, `com.microsoft`, `com.apple`, `com.samsung`, `com.zing.zalo`, `com.novastore`, `vn.novastore`); `title` 2–50, `shortDescription` 10–80, `fullDescription` 20–4000 ký tự; URL phải `https`; `categoryId` phải tồn tại và đang hiển thị.
+- **Không sửa được qua API:** `packageName`, `slug`, `status`, chủ sở hữu (`developerAccountId`). DB có trigger chặn đổi chủ sở hữu và đổi package name.
+- **Slug** sinh từ package name (`vn.acme.notes` → `vn-acme-notes`); trùng thì thêm hậu tố ngẫu nhiên.
+- **404 thống nhất:** app của developer khác và app không tồn tại trả cùng một `404 NOT_FOUND`; kiểm sở hữu trước, nên developer bị khóa gọi app của người khác vẫn nhận `404`.
+- **Archive:** app chưa từng phát hành được giải phóng package name (chuyển sang `pending_package_name`, phản hồi `packageNameReleased: true`) để đăng ký lại; app đã từng phát hành giữ tên vĩnh viễn.
+
+| Mã | HTTP | Khi nào |
+|----|------|--------|
+| `PACKAGE_NAME_TAKEN` | 409 | Package name đã thuộc app khác (kể cả khi tạo đồng thời) |
+| `PACKAGE_NAME_RESERVED` | 400 | Package name nằm dưới root dành riêng |
+| `INVALID_CATEGORY` | 400 | Danh mục không tồn tại hoặc đang ẩn |
+| `APP_NOT_EDITABLE` | 409 | Sửa metadata khi app không ở `draft` |
+| `INVALID_APP_STATUS_TRANSITION` | 409 | Archive từ trạng thái không cho phép, hoặc trạng thái vừa bị đổi |
+| `DEVELOPER_ACCOUNT_NOT_ACTIVE` | 403 | Developer không `active` tạo/sửa/archive app |
+
+### 4.2 Release & media (Phase 2C+, chưa triển khai)
+
+| Method | Path | Auth | Mô tả |
+|--------|------|------|------|
 | POST | `/apps/:id/media/upload-session` | D | Presigned PUT cho icon/screenshot |
 | DELETE | `/apps/:id/media/:mediaId` ✍ | D | Gỡ media |
 | POST | `/apps/:id/releases` ✍ | D | Tạo release draft |
@@ -153,6 +195,10 @@ Kết quả xử lý được trả qua `GET /apps/:id/releases/:releaseId` (pol
 | GET | `/admin/developers` | M | **Đã triển khai.** `?status=&limit=&cursor=`; trả `{ data, nextCursor }` |
 | GET | `/admin/developers/:developerAccountId` | M | **Đã triển khai.** Chi tiết + `allowedTransitions` |
 | POST | `/admin/developers/:developerAccountId/status` ✍ | M (banned: A) | **Đã triển khai.** Đổi trạng thái developer (thay cho `/suspend` trong bản thiết kế đầu) |
+| GET | `/admin/categories` | A | **Đã triển khai (2B).** Mọi danh mục, kể cả đang ẩn, kèm `appCount` |
+| POST | `/admin/categories` ✍ | A | **Đã triển khai (2B).** Tạo danh mục; slug trùng → `409 CATEGORY_SLUG_TAKEN` |
+| PATCH | `/admin/categories/:categoryId` ✍ | A | **Đã triển khai (2B).** Sửa tên/icon/thứ tự, ẩn/hiện (`isActive`); slug không sửa được |
+| DELETE | `/admin/categories/:categoryId` ✍ | A | **Đã triển khai (2B).** Chỉ khi chưa có app; đang dùng → `409 CATEGORY_IN_USE` (hãy ẩn) |
 | POST | `/admin/users/:id/roles` ✍ | A | Gán/gỡ moderator/admin |
 | GET | `/admin/audit-logs` | A | Lọc theo actor/target/action |
 | GET | `/admin/dashboard` | M | **Đã triển khai (Phase 1).** KPI: pending, mới gửi, bị report, dev hoạt động, tỉ lệ duyệt |

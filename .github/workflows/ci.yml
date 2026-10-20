@@ -53,6 +53,8 @@ jobs:
           --health-cmd "pg_isready -U novastore" --health-interval 5s --health-timeout 3s --health-retries 10
     env:
       DATABASE_URL: postgresql://novastore:novastore@localhost:5432/novastore?schema=public
+      # psql (libpq) không chấp nhận tham số `schema` riêng của Prisma.
+      PSQL_URL: postgresql://novastore:novastore@localhost:5432/novastore
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -72,10 +74,10 @@ jobs:
         run: pnpm db:seed
       - name: Append-only audit log is enforced
         run: |
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "INSERT INTO audit_logs (action, target_type) VALUES ('ci.check', 'system');"
-          if psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DELETE FROM audit_logs;"; then
+          psql "$PSQL_URL" -v ON_ERROR_STOP=1 -c "INSERT INTO audit_logs (action, target_type) VALUES ('ci.check', 'system');"
+          if psql "$PSQL_URL" -v ON_ERROR_STOP=1 -c "DELETE FROM audit_logs;"; then
             echo "audit_logs DELETE should have failed" && exit 1
           fi
       - name: Unaccented search works
         run: |
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -tAc "SELECT to_tsvector('simple', immutable_unaccent('Ghi chú')) @@ plainto_tsquery('simple', 'ghi chu');" | grep -q t
+          psql "$PSQL_URL" -v ON_ERROR_STOP=1 -tAc "SELECT to_tsvector('simple', immutable_unaccent('Ghi chú')) @@ plainto_tsquery('simple', 'ghi chu');" | grep -q t
